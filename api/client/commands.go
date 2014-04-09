@@ -56,7 +56,6 @@ func (cli *DockerCli) CmdHelp(args ...string) error {
 		{"images", "List images"},
 		{"import", "Create a new filesystem image from the contents of a tarball"},
 		{"info", "Display system-wide information"},
-		{"insert", "Insert a file in an image"},
 		{"inspect", "Return low-level information on a container"},
 		{"kill", "Kill a running container"},
 		{"load", "Load an image from a tar archive"},
@@ -85,7 +84,9 @@ func (cli *DockerCli) CmdHelp(args ...string) error {
 	return nil
 }
 
+// FIXME: 'insert' is deprecated.
 func (cli *DockerCli) CmdInsert(args ...string) error {
+	fmt.Fprintf(os.Stderr, "Warning: '%s' is deprecated and will be removed in a future version. Please use 'docker build' and 'ADD' instead.\n")
 	cmd := cli.Subcmd("insert", "IMAGE URL PATH", "Insert a file from URL in the IMAGE at PATH")
 	if err := cmd.Parse(args); err != nil {
 		return nil
@@ -1135,10 +1136,11 @@ func (cli *DockerCli) CmdPull(args ...string) error {
 func (cli *DockerCli) CmdImages(args ...string) error {
 	cmd := cli.Subcmd("images", "[OPTIONS] [NAME]", "List images")
 	quiet := cmd.Bool([]string{"q", "-quiet"}, false, "Only show numeric IDs")
-	all := cmd.Bool([]string{"a", "-all"}, false, "Show all images (by default filter out the intermediate images used to build)")
+	all := cmd.Bool([]string{"a", "-all"}, false, "Show all images (by default filter out the intermediate image layers)")
 	noTrunc := cmd.Bool([]string{"#notrunc", "-no-trunc"}, false, "Don't truncate output")
-	flViz := cmd.Bool([]string{"v", "#viz", "-viz"}, false, "Output graph in graphviz format")
-	flTree := cmd.Bool([]string{"t", "#tree", "-tree"}, false, "Output graph in tree format")
+	// FIXME: --viz and --tree are deprecated. Remove them in a future version.
+	flViz := cmd.Bool([]string{"#v", "#viz", "#-viz"}, false, "Output graph in graphviz format")
+	flTree := cmd.Bool([]string{"#t", "#tree", "#-tree"}, false, "Output graph in tree format")
 
 	if err := cmd.Parse(args); err != nil {
 		return nil
@@ -1150,6 +1152,7 @@ func (cli *DockerCli) CmdImages(args ...string) error {
 
 	filter := cmd.Arg(0)
 
+	// FIXME: --viz and --tree are deprecated. Remove them in a future version.
 	if *flViz || *flTree {
 		body, _, err := readBody(cli.call("GET", "/images/json?all=1", nil, false))
 		if err != nil {
@@ -1260,6 +1263,7 @@ func (cli *DockerCli) CmdImages(args ...string) error {
 	return nil
 }
 
+// FIXME: --viz and --tree are deprecated. Remove them in a future version.
 func (cli *DockerCli) WalkTree(noTrunc bool, images *engine.Table, byParent map[string]*engine.Table, prefix string, printNode func(cli *DockerCli, noTrunc bool, image *engine.Env, prefix string)) {
 	length := images.Len()
 	if length > 1 {
@@ -1286,6 +1290,7 @@ func (cli *DockerCli) WalkTree(noTrunc bool, images *engine.Table, byParent map[
 	}
 }
 
+// FIXME: --viz and --tree are deprecated. Remove them in a future version.
 func (cli *DockerCli) printVizNode(noTrunc bool, image *engine.Env, prefix string) {
 	var (
 		imageID  string
@@ -1309,6 +1314,7 @@ func (cli *DockerCli) printVizNode(noTrunc bool, image *engine.Env, prefix strin
 	}
 }
 
+// FIXME: --viz and --tree are deprecated. Remove them in a future version.
 func (cli *DockerCli) printTreeNode(noTrunc bool, image *engine.Env, prefix string) {
 	var imageID string
 	if noTrunc {
@@ -1427,7 +1433,8 @@ func (cli *DockerCli) CmdCommit(args ...string) error {
 	cmd := cli.Subcmd("commit", "[OPTIONS] CONTAINER [REPOSITORY[:TAG]]", "Create a new image from a container's changes")
 	flComment := cmd.String([]string{"m", "-message"}, "", "Commit message")
 	flAuthor := cmd.String([]string{"a", "#author", "-author"}, "", "Author (eg. \"John Hannibal Smith <hannibal@a-team.com>\"")
-	flConfig := cmd.String([]string{"#run", "-run"}, "", "Config automatically applied when the image is run. "+`(ex: --run='{"Cmd": ["cat", "/world"], "PortSpecs": ["22"]}')`)
+	// FIXME: --run is deprecated, it will be replaced with inline Dockerfile commands.
+	flConfig := cmd.String([]string{"#run", "#-run"}, "", "this option is deprecated and will be removed in a future version in favor of inline Dockerfile-compatible commands")
 	if err := cmd.Parse(args); err != nil {
 		return nil
 	}

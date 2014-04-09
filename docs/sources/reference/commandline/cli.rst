@@ -316,8 +316,6 @@ by using the ``git://`` schema.
 
       -m, --message="": Commit message
       -a, --author="": Author (eg. "John Hannibal Smith <hannibal@a-team.com>"
-      --run="": Configuration changes to be applied when the image is launched with `docker run`.
-               (ex: --run='{"Cmd": ["cat", "/world"], "PortSpecs": ["22"]}')
 
 .. _cli_commit_examples:
 
@@ -336,96 +334,6 @@ Commit an existing container
 	REPOSITORY                        TAG                 ID                  CREATED             VIRTUAL SIZE
 	SvenDowideit/testimage            version3            f5283438590d        16 seconds ago      335.7 MB
 
-Change the command that a container runs
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-Sometimes you have an application container running just a service and you need
-to make a quick change and then change it back.
-
-In this example, we run a container with ``ls`` and then change the image to
-run ``ls /etc``.
-
-.. code-block:: bash
-
-        $ docker run -t --name test ubuntu ls
-        bin  boot  dev  etc  home  lib  lib64  media  mnt  opt  proc  root  run  sbin  selinux  srv  sys  tmp  usr  var
-        $ docker commit --run='{"Cmd": ["ls","/etc"]}' test test2
-        933d16de9e70005304c1717b5c6f2f39d6fd50752834c6f34a155c70790011eb
-        $ docker run -t test2
-        adduser.conf            gshadow          login.defs           rc0.d
-        alternatives            gshadow-         logrotate.d          rc1.d
-        apt                     host.conf        lsb-base             rc2.d
-        ...
-
-Merged configs example
-......................
-
-Say you have a Dockerfile like so:
-
-.. code-block:: bash
-
-        ENV MYVAR foobar
-        RUN apt-get install openssh
-        EXPOSE 22
-        CMD ["/usr/sbin/sshd -D"]
-        ...
-
-If you run that, make some changes, and then commit, Docker will merge the environment variable and exposed port configuration settings with any that you specify in the --run= option. This is a change from Docker 0.8.0 and prior where no attempt was made to preserve any existing configuration on commit.
-
-.. code-block:: bash
-
-        $ docker build -t me/foo .
-        $ docker run -t -i me/foo /bin/bash
-        foo-container$ [make changes in the container]
-        foo-container$ exit
-        $ docker commit --run='{"Cmd": ["ls"]}' [container-id] me/bar
-        ...
-
-The me/bar image will now have port 22 exposed, MYVAR env var set to 'foobar', and its default command will be ["ls"].
-
-Note that this is currently a shallow merge. So, for example, if you had specified a new port spec in the --run= config above, that would have clobbered the 'EXPOSE 22' setting from the parent container.
-
-Full --run example
-..................
-
-The ``--run`` JSON hash changes the ``Config`` section when running ``docker inspect CONTAINERID``
-or ``config`` when running ``docker inspect IMAGEID``. Existing configuration key-values that are
-not overridden in the JSON hash will be merged in.
-
-(Multiline is okay within a single quote ``'``)
-
-.. code-block:: bash
-
-  $ sudo docker commit --run='
-  {
-      "Entrypoint" : null,
-      "Privileged" : false,
-      "User" : "",
-      "VolumesFrom" : "",
-      "Cmd" : ["cat", "-e", "/etc/resolv.conf"],
-      "Dns" : ["8.8.8.8", "8.8.4.4"],
-      "DnsSearch" : ["example.com"],
-      "MemorySwap" : 0,
-      "AttachStdin" : false,
-      "AttachStderr" : false,
-      "CpuShares" : 0,
-      "OpenStdin" : false,
-      "Volumes" : null,
-      "Hostname" : "122612f45831",
-      "PortSpecs" : ["22", "80", "443"],
-      "Image" : "b750fe79269d2ec9a3c593ef05b4332b1d1a02a62b4accb2c21d589ff2f5f2dc",
-      "Tty" : false,
-      "Env" : [
-         "HOME=/",
-         "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
-      ],
-      "StdinOnce" : false,
-      "Domainname" : "",
-      "WorkingDir" : "/",
-      "NetworkDisabled" : false,
-      "Memory" : 0,
-      "AttachStdout" : false
-  }' $CONTAINER_ID
 
 .. _cli_cp:
 
@@ -597,11 +505,16 @@ To see how the ``docker:latest`` image was built:
 
     List images
 
-      -a, --all=false: Show all images (by default filter out the intermediate images used to build)
+      -a, --all=false: Show all images (by default filter out the intermediate image layers)
       --no-trunc=false: Don't truncate output
       -q, --quiet=false: Only show numeric IDs
-      -t, --tree=false: Output graph in tree format
-      -v, --viz=false: Output graph in graphviz format
+
+The default ``docker images`` will show all top level images, their repository
+and tags, and their virtual size.
+
+Docker images have intermediate layers that increase reuseability, decrease 
+disk usage, and speed up ``docker build`` by allowing each step to be cached.
+These intermediate layers are not shown by default.
 
 Listing the most recently created images
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -636,46 +549,6 @@ Listing the full length image IDs
 	<none>                        <none>              f9f1e26352f0a3ba6a0ff68167559f64f3e21ff7ada60366e2d44a04befd1d3a   23 hours ago        1.089 GB
 	tryout                        latest              2629d1fa0b81b222fca63371ca16cbf6a0772d07759ff80e8d1369b926940074   23 hours ago        131.5 MB
 	<none>                        <none>              5ed6274db6ceb2397844896966ea239290555e74ef307030ebb01ff91b1914df   24 hours ago        1.089 GB
-
-Displaying images visually
-~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-.. code-block:: bash
-
-    $ sudo docker images --viz | dot -Tpng -o docker.png
-
-.. image:: docker_images.gif
-   :alt: Example inheritance graph of Docker images.
-
-
-Displaying image hierarchy
-~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-.. code-block:: bash
-
-    $ sudo docker images --tree
-
-    ├─8dbd9e392a96 Size: 131.5 MB (virtual 131.5 MB) Tags: ubuntu:12.04,ubuntu:latest,ubuntu:precise
-    └─27cf78414709 Size: 180.1 MB (virtual 180.1 MB)
-      └─b750fe79269d Size: 24.65 kB (virtual 180.1 MB) Tags: ubuntu:12.10,ubuntu:quantal
-        ├─f98de3b610d5 Size: 12.29 kB (virtual 180.1 MB)
-        │ └─7da80deb7dbf Size: 16.38 kB (virtual 180.1 MB)
-        │   └─65ed2fee0a34 Size: 20.66 kB (virtual 180.2 MB)
-        │     └─a2b9ea53dddc Size: 819.7 MB (virtual 999.8 MB)
-        │       └─a29b932eaba8 Size: 28.67 kB (virtual 999.9 MB)
-        │         └─e270a44f124d Size: 12.29 kB (virtual 999.9 MB) Tags: progrium/buildstep:latest
-        └─17e74ac162d8 Size: 53.93 kB (virtual 180.2 MB)
-          └─339a3f56b760 Size: 24.65 kB (virtual 180.2 MB)
-            └─904fcc40e34d Size: 96.7 MB (virtual 276.9 MB)
-              └─b1b0235328dd Size: 363.3 MB (virtual 640.2 MB)
-                └─7cb05d1acb3b Size: 20.48 kB (virtual 640.2 MB)
-                  └─47bf6f34832d Size: 20.48 kB (virtual 640.2 MB)
-                    └─f165104e82ed Size: 12.29 kB (virtual 640.2 MB)
-                      └─d9cf85a47b7e Size: 1.911 MB (virtual 642.2 MB)
-                        └─3ee562df86ca Size: 17.07 kB (virtual 642.2 MB)
-                          └─b05fc2d00e4a Size: 24.96 kB (virtual 642.2 MB)
-                            └─c96a99614930 Size: 12.29 kB (virtual 642.2 MB)
-                              └─a6a357a48c49 Size: 12.29 kB (virtual 642.2 MB) Tags: ndj/mongodb:latest
 
 .. _cli_import:
 
@@ -752,34 +625,6 @@ preserved.
 	Kernel Version: 3.8.0-33-generic
 	WARNING: No swap limit support
 
-
-.. _cli_insert:
-
-``insert``
-----------
-
-::
-
-    Usage: docker insert IMAGE URL PATH
-
-    Insert a file from URL in the IMAGE at PATH
-
-Use the specified ``IMAGE`` as the parent for a new image which adds a
-:ref:`layer <layer_def>` containing the new file. The ``insert`` command does
-not modify the original image, and the new image has the contents of the parent
-image, plus the new file.
-
-
-Examples
-~~~~~~~~
-
-Insert file from GitHub
-.......................
-
-.. code-block:: bash
-
-    $ sudo docker insert 8283e18b24bc https://raw.github.com/metalivedev/django/master/postinstall /tmp/postinstall.sh
-    06fd35556d7b
 
 .. _cli_inspect:
 

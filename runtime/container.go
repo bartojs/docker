@@ -361,12 +361,8 @@ func (container *Container) Attach(stdin io.ReadCloser, stdinCloser io.Closer, s
 func populateCommand(c *Container) {
 	var (
 		en           *execdriver.Network
-		driverConfig = c.hostConfig.DriverOptions
-	)
-
-	if driverConfig == nil {
 		driverConfig = make(map[string][]string)
-	}
+	)
 
 	en = &execdriver.Network{
 		Mtu:       c.runtime.config.Mtu,
@@ -433,6 +429,12 @@ func (container *Container) Start() (err error) {
 			container.cleanup()
 		}
 	}()
+
+	if container.ResolvConfPath == "" {
+		if err := container.setupContainerDns(); err != nil {
+			return err
+		}
+	}
 
 	if err := container.Mount(); err != nil {
 		return err
@@ -1177,4 +1179,51 @@ func (container *Container) DisableLink(name string) {
 			utils.Debugf("Could not find active link for %s", name)
 		}
 	}
+}
+
+func (container *Container) setupContainerDns() error {
+	var (
+		config  = container.hostConfig
+		runtime = container.runtime
+	)
+	resolvConf, err := utils.GetResolvConf()
+	if err != nil {
+		return err
+	}
+	// If custom dns exists, then create a resolv.conf for the container
+	if len(config.Dns) > 0 || len(runtime.config.Dns) > 0 || len(config.DnsSearch) > 0 || len(runtime.config.DnsSearch) > 0 {
+		var (
+			dns       = utils.GetNameservers(resolvConf)
+			dnsSearch = utils.GetSearchDomains(resolvConf)
+		)
+		if len(config.Dns) > 0 {
+			dns = config.Dns
+		} else if len(runtime.config.Dns) > 0 {
+			dns = runtime.config.Dns
+		}
+		if len(config.DnsSearch) > 0 {
+			dnsSearch = config.DnsSearch
+		} else if len(runtime.config.DnsSearch) > 0 {
+			dnsSearch = runtime.config.DnsSearch
+		}
+		container.ResolvConfPath = path.Join(container.root, "resolv.conf")
+		f, err := os.Create(container.ResolvConfPath)
+		if err != nil {
+			return err
+		}
+		defer f.Close()
+		for _, dns := range dns {
+			if _, err := f.Write([]byte("nameserver " + dns + "\n")); err != nil {
+				return err
+			}
+		}
+		if len(dnsSearch) > 0 {
+			if _, err := f.Write([]byte("search " + strings.Join(dnsSearch, " ") + "\n")); err != nil {
+				return err
+			}
+		}
+	} else {
+		container.ResolvConfPath = "/etc/resolv.conf"
+	}
+	return nil
 }

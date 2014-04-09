@@ -59,8 +59,9 @@ func setupMountsForContainer(container *Container, envPath string) error {
 }
 
 func applyVolumesFrom(container *Container) error {
-	if container.Config.VolumesFrom != "" {
-		for _, containerSpec := range strings.Split(container.Config.VolumesFrom, ",") {
+	volumesFrom := container.hostConfig.VolumesFrom
+	if len(volumesFrom) > 0 {
+		for _, containerSpec := range volumesFrom {
 			var (
 				mountRW   = true
 				specParts = strings.SplitN(containerSpec, ":", 2)
@@ -68,7 +69,7 @@ func applyVolumesFrom(container *Container) error {
 
 			switch len(specParts) {
 			case 0:
-				return fmt.Errorf("Malformed volumes-from specification: %s", container.Config.VolumesFrom)
+				return fmt.Errorf("Malformed volumes-from specification: %s", containerSpec)
 			case 2:
 				switch specParts[1] {
 				case "ro":
@@ -177,12 +178,8 @@ func createVolumes(container *Container) error {
 		if bindMap, exists := binds[volPath]; exists {
 			isBindMount = true
 			srcPath = bindMap.SrcPath
-			srcAbs, err := filepath.Abs(srcPath)
-			if err != nil {
-				return err
-			}
-			if srcPath != srcAbs {
-				return fmt.Errorf("%s should be an absolute path", srcPath)
+			if !filepath.IsAbs(srcPath) {
+				return fmt.Errorf("%s must be an absolute path", srcPath)
 			}
 			if strings.ToLower(bindMap.Mode) == "rw" {
 				srcRW = true
